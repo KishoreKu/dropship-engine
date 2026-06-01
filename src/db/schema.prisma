@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  syncLogs SyncLog[]
+}
+
+model ImportedProduct {
+  id                  String   @id @default(uuid())
+  shopifyProductId    BigInt?
+  aliExpressProductId String
+  dsersProductId      String?
+  title               String
+  price               String
+  sku                 String
+  images              String[]
+  status              String   @default("pending")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  SyncLogs SyncLog[]
+}
+
+model FulfillmentOrder {
+  id             String   @id @default(uuid())
+  shopifyOrderId BigInt
+  dsersOrderId   String?
+  status         String   @default("pending")
+  items          Json
+  shippingMethod String
+  trackingNumber String?
+  trackingUrl    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model SyncLog {
+  id          String   @id @default(uuid())
+  type        String
+  status      String
+  message     String
+  details     Json?
+  accountId   String?
+  productId   String?
+  createdAt   DateTime @default(now())
+
+  account Account?  @relation(fields: [accountId], references: [id])
+  product ImportedProduct? @relation(fields: [productId], references: [id])
+}
