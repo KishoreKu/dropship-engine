@@ -1,0 +1,112 @@
+name: Build & Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # required for OIDC login
+  contents: read
+
+env:
+  RESOURCE_GROUP: rg-dropship
+  BACKEND_APP:    dropship-backend
+  FRONTEND_APP:   dropship-frontend
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Backend typecheck
+        run: npm ci && npm run typecheck
+      - name: Frontend typecheck & build
+        run: |
+          cd frontend
+          npm ci
+          npx tsc --noEmit
+          npx vite build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: check
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure OIDC Login
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get ACR name from deployment outputs
+        id: acr
+        run: |
+          NAME=$(az deployment group show \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name main \
+            --query properties.outputs.acrName.value -o tsv)
+          SERVER=$(az deployment group show \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name main \
+            --query properties.outputs.acrLoginServer.value -o tsv)
+          echo "name=$NAME"     >> "$GITHUB_OUTPUT"
+          echo "server=$SERVER" >> "$GITHUB_OUTPUT"
+
+      - name: Get backend URL (needed at frontend build time)
+        id: urls
+        run: |
+          BACKEND=$(az containerapp show \
+            --name ${{ env.BACKEND_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "backend=https://$BACKEND" >> "$GITHUB_OUTPUT"
+
+      - name: Build backend image in ACR
+        run: |
+          az acr build \
+            --registry ${{ steps.acr.outputs.name }} \
+            --image backend:${{ github.sha }} \
+            --image backend:latest \
+            .
+
+      - name: Build frontend image in ACR
+        run: |
+          az acr build \
+            --registry ${{ steps.acr.outputs.name }} \
+            --image frontend:${{ github.sha }} \
+            --image frontend:latest \
+            ./frontend \
+            --build-arg VITE_API_URL=${{ steps.urls.outputs.backend }}
+
+      # Full Bicep redeploys require re-supplying every @secure() param, so CI
+      # only swaps image tags; template changes are deployed via
+      # scripts/deploy-infra.sh.
+      - name: Update backend image
+        run: |
+          az containerapp update \
+            --name ${{ env.BACKEND_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ steps.acr.outputs.server }}/backend:${{ github.sha }}
+
+      - name: Update frontend image
+        run: |
+          az containerapp update \
+            --name ${{ env.FRONTEND_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ steps.acr.outputs.server }}/frontend:${{ github.sha }}
+
+      - name: Print deployment URLs
+        run: |
+          for APP in ${{ env.BACKEND_APP }} ${{ env.FRONTEND_APP }}; do
+            echo "$APP: https://$(az containerapp show --name $APP \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --query properties.configuration.ingress.fqdn -o tsv)"
+          done
