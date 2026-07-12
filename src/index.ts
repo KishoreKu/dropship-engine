@@ -6,6 +6,7 @@ import cron from 'node-cron';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { authMiddleware } from './middleware/auth';
+import { authRouter } from './routes/auth';
 import { productRouter } from './routes/products';
 import { orderRouter } from './routes/orders';
 import { fulfillmentRouter } from './routes/fulfillment';
@@ -15,15 +16,20 @@ import { fulfillmentService } from './services/fulfillment.service';
 
 const app = express();
 
+// Behind Container Apps ingress; needed for real client IPs (rate limiting)
+app.set('trust proxy', 1);
+
 // ─── Middleware ──────────────────────────────────────────────
 app.use(helmet());
 app.use(cors());
 app.use(morgan('short'));
 app.use('/webhooks', express.json({ verify: (req, _res, buf) => { (req as any).rawBody = buf; } }));
 app.use('/api', express.json());
+app.use('/auth', express.json());
 
 // ─── Public routes ──────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.use('/auth', authRouter);
 app.use('/webhooks', webhookRouter);
 
 // ─── Protected routes ───────────────────────────────────────

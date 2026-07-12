@@ -13,6 +13,11 @@ export const config = {
   jwtSecret: req('JWT_SECRET'),
   database: { url: req('DATABASE_URL') },
 
+  auth: {
+    adminEmail: req('ADMIN_EMAIL'),
+    adminPasswordHash: req('ADMIN_PASSWORD_HASH'),
+  },
+
   shopify: {
     apiKey: req('SHOPIFY_API_KEY'),
     apiSecret: req('SHOPIFY_API_SECRET'),

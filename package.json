@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "description": "Multi-channel dropshipping automation engine – Shopify, AliExpress, DSers, JungleScout",
+  "prisma": {
+    "schema": "src/db/schema.prisma"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
+    "hash-password": "tsx scripts/hash-password.ts",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit"
   },

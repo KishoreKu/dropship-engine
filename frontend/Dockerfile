@@ -1,7 +1,10 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
-COPY package.json tsconfig.json ./
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+COPY package.json package-lock.json tsconfig.json ./
 COPY src/ ./src/
+COPY public/ ./public/
 COPY index.html ./
 RUN npm ci && npx vite build
 
